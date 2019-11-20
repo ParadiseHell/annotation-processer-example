@@ -1,31 +1,30 @@
 package com.paradisehell.api;
 
-import java.lang.reflect.Method;
-
 /**
  * 被注册的方法的信息
  *
  * @author ChengTao <a href="mailto:tao@paradisehell.org">Contact me.</a>
  * @since 2019/11/20 10:11
  */
-public final class SubscribedMethodInfo {
+public final class SubscriberMethodInfo {
   //<editor-fold desc="属性">
+  private String mMethodName;
   private Class<?> mParameterType;
-  private Method mMethod;
   //</editor-fold>
 
-  public SubscribedMethodInfo(Class<?> parameterType, Method method) {
+  public SubscriberMethodInfo(String methodName, Class<?> parameterType) {
+    mMethodName = methodName;
     mParameterType = parameterType;
-    mMethod = method;
   }
 
   //<editor-fold desc="Getter">
-  Class<?> getParameterType() {
-    return mParameterType;
+
+  String getMethodName() {
+    return mMethodName;
   }
 
-  Method getMethod() {
-    return mMethod;
+  Class<?> getParameterType() {
+    return mParameterType;
   }
   //</editor-fold>
 }

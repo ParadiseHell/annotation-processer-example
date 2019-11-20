@@ -2,10 +2,12 @@ package com.paradisehell.api;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import com.paradisehell.api.annotation.SubscribeOnMainThread;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -19,12 +21,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * @since 2019/11/19 18:05
  */
 public final class EventBus {
-  //<editor-fold desc="单例">
-  private static volatile EventBus sInstance;
+  //<editor-fold desc="常量">
+  private static final String TAG = EventBus.class.getSimpleName();
+  private static final List<ISubscriberIndex> SUBSCRIBER_INDEX_LIST = new ArrayList<>();
   //</editor-fold>
 
-  //<editor-fold desc="常量">
-  private static final Map<Class<?>, ISubscriberIndex> SUBSCRIBER_INDEX_MAP = new HashMap<>();
+  //<editor-fold desc="单例">
+  private static volatile EventBus sInstance;
   //</editor-fold>
 
   //<editor-fold desc="属性">
@@ -62,9 +65,12 @@ public final class EventBus {
     if (subscriber == null) {
       return;
     }
-    if (!findByIndex(subscriber)) {
-      findByReflect(subscriber);
+    if (findByIndex(subscriber)) {
+      Log.w(TAG, "findByIndex");
+      return;
     }
+    findByReflect(subscriber);
+    Log.w(TAG, "findByReflect");
   }
 
   /**
@@ -140,10 +146,33 @@ public final class EventBus {
    * @return 是否找到
    */
   private boolean findByIndex(Object subscriber) {
-    ISubscriberIndex index = SUBSCRIBER_INDEX_MAP.get(subscriber.getClass());
-    if (index != null
-        && index.getSubscribedMethods() != null
-        && !index.getSubscribedMethods().isEmpty()) {
+    if (!SUBSCRIBER_INDEX_LIST.isEmpty()) {
+      for (ISubscriberIndex index : SUBSCRIBER_INDEX_LIST) {
+        ISubscriberInfo info = index.getSubscriberInfo(subscriber.getClass());
+        if (info != null
+            && info.getSubscribedMethodInfos() != null
+            && info.getSubscribedMethodInfos().length > 0) {
+          try {
+            for (SubscriberMethodInfo methodInfo : info.getSubscribedMethodInfos()) {
+              Method method = subscriber.getClass().getMethod(
+                  methodInfo.getMethodName(), methodInfo.getParameterType()
+              );
+              // 添加订阅者和其相关方法
+              List<Subscription> subscriptionList = mSubscriptionsByTypeMap.get(
+                  methodInfo.getParameterType()
+              );
+              if (subscriptionList == null) {
+                subscriptionList = new LinkedList<>();
+                mSubscriptionsByTypeMap.put(methodInfo.getParameterType(), subscriptionList);
+              }
+              subscriptionList.add(new Subscription(subscriber, method));
+            }
+            return true;
+          } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+          }
+        }
+      }
     }
     return false;
   }
@@ -164,11 +193,12 @@ public final class EventBus {
       // 1. 判断是否有 SubscribeOnMainThread 注解
       SubscribeOnMainThread annotation = method.getAnnotation(SubscribeOnMainThread.class);
       if (annotation != null) {
-        // 2. 判断是否只有一个参数的方法
+        // 2. 判断是否只有一个参数的方法并且返回值为 void
         Class<?>[] parameterTypes = method.getParameterTypes();
-        if (parameterTypes.length == 1) {
+        Type returnType = method.getGenericReturnType();
+        if (parameterTypes.length == 1 && "void".equals(returnType.toString())) {
           find = true;
-          // 3. 添加记录者
+          // 3. 添加注册者和方法
           Class<?> parameter = parameterTypes[0];
           List<Subscription> subscriptionList = mSubscriptionsByTypeMap.get(parameter);
           if (subscriptionList == null) {
@@ -192,7 +222,7 @@ public final class EventBus {
    */
   public void addIndex(ISubscriberIndex index) {
     if (index != null) {
-      SUBSCRIBER_INDEX_MAP.put(index.getSubscriberType(), index);
+      SUBSCRIBER_INDEX_LIST.add(index);
     }
   }
   //</editor-fold>
